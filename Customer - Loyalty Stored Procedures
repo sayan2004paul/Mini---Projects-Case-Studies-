@@ -1,0 +1,54 @@
+-- Change the statement delimiter to allow use of ';' inside the procedure
+DELIMITER //
+
+-- Create stored procedure to calculate order total and loyalty points
+CREATE PROCEDURE Customer_summary(
+    IN input_order_id  INT,                 -- Input: Order ID to process
+    OUT order_total DECIMAL(10,2),          -- Output: Total amount for the order
+    OUT loyalty_points INT                  -- Output: Loyalty points earned for the order
+)
+BEGIN 
+
+    -- Declare local variables
+    DECLARE new_points INT;                 -- Holds calculated loyalty points
+    DECLARE customer_id_var INT;            -- Will store customer ID from the order
+    DECLARE total_order_value DECIMAL(10,2);-- Will store calculated order total
+
+    -- Get the customer_id for the given order
+    SELECT customer_id  
+    INTO customer_id_var 
+    FROM orders 
+    WHERE order_id = input_order_id;
+    
+    -- Calculate total order amount = SUM of (quantity × unit price)
+    SELECT SUM(quantity * unit_price) 
+    INTO total_order_value 
+    FROM order_items 
+    WHERE order_id = input_order_id;
+    
+    -- Calculate loyalty points: 1 point per $20 spent
+    SET new_points = FLOOR(total_order_value / 20);
+    
+    -- Set output values
+    SET loyalty_points = new_points;
+    SET order_total = total_order_value;
+    
+    -- Insert summary into log table only if customer_id was found
+    IF customer_id_var IS NOT NULL THEN 
+        INSERT INTO order_summary_log(order_id, customer_id, order_total, loyalty_points, log_time)
+        VALUES (input_order_id, customer_id_var, order_total, loyalty_points, NOW());
+    END IF;
+
+END //
+
+-- Restore default delimiter
+DELIMITER ;
+
+-- Call the procedure for a specific order and store output in session variables
+CALL Customer_summary(1001, @total, @points);
+
+-- View the output values returned by the procedure
+SELECT @total AS OrderTotal, @points AS LoyaltyPoints;
+
+-- View all records in the summary log table
+SELECT * FROM order_summary_log;
